@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
-const db = require('../lib/db');
+const { pool, SCHEMA } = require('../lib/db');
 const repo = require('../lib/repo');
 
 function readCsv(file) {
@@ -35,18 +35,22 @@ function loadEmployees() {
   })).filter(e => e.name);
 }
 
-function runSeedIfEmpty() {
-  const branchCount = db.prepare('SELECT COUNT(*) c FROM branches').get().c;
-  if (branchCount > 0) return; // already seeded (or already has real data) — never overwrite
-  repo.replaceBranches(loadBranches());
-  repo.replaceHotels(loadHotels());
-  repo.replaceEmployees(loadEmployees());
+async function runSeedIfEmpty() {
+  const { init } = require('../lib/db');
+  await init();
+  const { rows } = await pool.query(`SELECT COUNT(*)::int AS c FROM ${SCHEMA}.branches`);
+  if (rows[0].c > 0) return; // already seeded (or already has real data) — never overwrite
+  await repo.replaceBranches(loadBranches());
+  await repo.replaceHotels(loadHotels());
+  await repo.replaceEmployees(loadEmployees());
   console.log('Seeded initial data from CSV files.');
 }
 
 if (require.main === module) {
-  runSeedIfEmpty();
-  console.log('Seed check complete.');
+  runSeedIfEmpty().then(() => {
+    console.log('Seed check complete.');
+    pool.end();
+  }).catch(err => { console.error(err); process.exit(1); });
 }
 
 module.exports = { runSeedIfEmpty };

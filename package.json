@@ -5,14 +5,16 @@
   "private": true,
   "main": "server.js",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=18.0.0"
   },
   "scripts": {
     "start": "node server.js",
-    "seed": "node seed/run-seed.js"
+    "dev": "node --env-file=.env server.js",
+    "seed": "node --env-file=.env seed/run-seed.js"
   },
   "dependencies": {
     "csv-parse": "^5.5.6",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "pg": "^8.13.0"
   }
 }

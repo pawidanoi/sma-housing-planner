@@ -10,47 +10,64 @@
 ## สถาปัตยกรรม
 
 - **Node.js + Express** เสิร์ฟทั้ง REST API (`/api/*`) และหน้าเว็บ (`public/`) จากโปรเซสเดียว
-- **SQLite ผ่าน `node:sqlite`** (built-in ของ Node ตั้งแต่ v22.5) — ไม่มี native dependency ต้องคอมไพล์
-  เลือกใช้แทน Postgres/Supabase เพราะข้อมูลเล็ก (~230 สาขา, ~210 ที่พัก, ~120 พนักงาน, แผนงานหลักร้อย
-  รายการ) และไม่ต้องเปิดบัญชี/ตั้งค่าฐานข้อมูลแยกต่างหาก — ไฟล์ฐานข้อมูลอยู่ที่ `data/app.sqlite`
+- **Postgres ผ่าน Supabase** (library `pg`) — ใช้ **project Supabase เดิมของระบบจองที่พัก** ที่ปิดไปแล้ว
+  (แชร์บัญชี/โปรเจกต์เดียวกันเพราะแพลนฟรีจำกัดจำนวนโปรเจกต์) แต่ตารางทั้งหมดของระบบนี้อยู่ใน **Postgres
+  schema แยกต่างหากชื่อ `housing_planner`** (ไม่ใช่ `public` ที่ระบบเดิมใช้) เพื่อไม่ให้ชื่อตาราง
+  (`branches`/`hotels`/`employees`) ชนหรือปนกับข้อมูลเก่า — ดู `lib/db.js` (ค่าคงที่ `SCHEMA`)
+- เชื่อมต่อผ่าน **Supabase connection pooler** (`*.pooler.supabase.com:6543`) ไม่ใช่ direct connection
+  (`db.*.supabase.co:5432`) เพราะ hostname ตรงนั้นเป็น IPv6-only ในโปรเจกต์ใหม่ๆ ของ Supabase ซึ่งหลาย
+  เครือข่าย/host (รวมถึงเครื่องที่ใช้พัฒนาโปรเจกต์นี้) ต่อผ่าน IPv6 ไม่ได้
 - ตั้งใจ **ไม่ใช้ Vercel serverless functions** — โปรเจกต์เดิม (`sma-booking-backend`) เจอปัญหา Hobby
   plan จำกัด 12 functions ต่อ deployment มาก่อน (ดู HANDOFF §9) ระบบนี้เป็น Node process เดียวรันทั้งวัน
   จึงไม่ติดข้อจำกัดนั้นเลย — ต้อง deploy บน host ที่รัน persistent process ได้ (ดูหัวข้อ deploy ด้านล่าง)
+  ข้อดีอีกอย่างของการใช้ Postgres ภายนอกคือ **ใช้ได้กับ Render free tier** ด้วย เพราะข้อมูลไม่ได้อยู่ใน
+  disk ของ web service เอง (free tier ของ Render ไม่รองรับ persistent disk)
 - ไม่มีระบบ login — ตรงตาม HANDOFF §3 (ผู้ใช้ไม่เคยขอ auth ตัดสินใจไว้แล้วว่าไม่ทำ auth scoping)
 
 ## รันเครื่อง local
 
-```bash
-npm install
-npm start
+ต้องมีไฟล์ `.env` (ไม่ commit เข้า git — กันไว้ใน `.gitignore` แล้ว) ที่มีบรรทัด:
+
+```
+DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
 ```
 
-เปิด http://localhost:3210 — ครั้งแรกที่รัน ระบบจะ seed ข้อมูลจาก `seed/branches.csv`,
-`seed/hotels.csv`, `seed/employees.csv` ให้อัตโนมัติ (แค่ครั้งเดียวตอนตารางว่าง — รันซ้ำจะไม่ทับข้อมูล
-จริงที่มีอยู่แล้ว)
+เอาค่านี้จาก Supabase dashboard → ปุ่ม **Connect** → เลือกโหมด **Transaction pooler** (ไม่ใช่ direct
+connection ธรรมดา ด้วยเหตุผลข้างบน)
 
-ตั้ง `PORT` หรือ `DB_PATH` ผ่าน environment variable ได้ถ้าต้องการเปลี่ยนพอร์ต/ตำแหน่งไฟล์ฐานข้อมูล
+```bash
+npm install
+npm run seed      # ครั้งแรกเท่านั้น — สร้าง schema/ตาราง + import ข้อมูลจาก seed/*.csv (รันซ้ำได้ปลอดภัย ข้ามถ้ามีข้อมูลอยู่แล้ว)
+npm run dev
+```
 
-## Deploy จริง
+(`npm run dev` โหลด `.env` ให้อัตโนมัติผ่าน Node's `--env-file` — บน Render/production ใช้ `npm start`
+ธรรมดาแทน เพราะ `DATABASE_URL` จะถูกตั้งเป็น environment variable จริงโดย platform ไม่ต้องพึ่งไฟล์ `.env`)
 
-ต้องใช้ host ที่รัน Node process แบบต่อเนื่อง (ไม่ใช่ serverless) และมี **persistent disk** สำหรับเก็บ
-ไฟล์ `data/app.sqlite` ไม่ให้หายตอน deploy ใหม่ ตัวเลือกที่ตรงเงื่อนไข: **Render** (Web Service ธรรมดา +
-Persistent Disk), Railway, Fly.io, หรือ VPS ของบริษัทเอง
+เปิด http://localhost:3210 — ตั้ง `PORT` ผ่าน environment variable ได้ถ้าต้องการเปลี่ยนพอร์ต
 
-ขั้นตอนทั่วไป (ตัวอย่าง Render):
-1. Push โค้ดนี้ขึ้น GitHub repo ใหม่ (แยกจาก `sma-booking-backend` เดิม)
-2. สร้าง Web Service ใหม่ใน Render ผูกกับ repo, build command `npm install`, start command `npm start`
-3. เพิ่ม **Persistent Disk** mount ที่ path เช่น `/data` แล้วตั้ง env var `DB_PATH=/data/app.sqlite`
-   (ถ้าไม่ตั้ง ไฟล์จะอยู่ใน container filesystem ชั่วคราว หายทุกครั้งที่ deploy ใหม่)
-4. Node version ต้อง ≥22.5 (ดู `engines` ใน `package.json`) — ตั้งผ่าน `.node-version` หรือ Render's
-   environment settings ถ้า host ไม่ auto-detect
+## Deploy จริง (Render)
+
+เพราะฐานข้อมูลอยู่ที่ Supabase (ภายนอก) ไม่ใช่ไฟล์ในเครื่อง Render จึงใช้ **free tier ธรรมดาได้เลย** ไม่
+ต้องเสียเงินซื้อ persistent disk:
+
+1. Push โค้ดนี้ขึ้น GitHub repo (ทำแล้วที่ `github.com/pawidanoy/sma-housing-planner`)
+2. สร้าง **Web Service** ใหม่ใน Render ผูกกับ repo นี้
+   - Build command: `npm install`
+   - Start command: `node server.js`
+3. เพิ่ม environment variable **`DATABASE_URL`** เป็นค่าเดียวกับใน `.env` local (ไปตั้งใน Render
+   dashboard → service นี้ → Environment)
+4. Deploy — ครั้งแรกจะ seed ข้อมูลอัตโนมัติเพราะ `server.js` เรียก `runSeedIfEmpty()` ก่อน listen
+   (เหมือน local)
+5. **ข้อควรรู้ของ Render free tier:** เว็บจะ "หลับ" หลังไม่มีคนใช้ ~15 นาที พอมีคนเข้าใหม่จะใช้เวลา
+   ปลุกขึ้นมาสัก 30-60 วินาที (ไม่กระทบข้อมูล เพราะข้อมูลอยู่ที่ Supabase ไม่ใช่ในตัว service)
 
 ## ข้อมูลตั้งต้น (seed)
 
-ไฟล์ `seed/*.csv` มาจากทะเบียนจริงที่แนบมากับ HANDOFF (230 สาขา, 207 ที่พัก, 114 พนักงาน) — seed จะรัน
-เฉพาะตอนตาราง `branches` ว่างเปล่าเท่านั้น ถ้าต้องการ reseed ข้อมูลใหม่ทั้งหมด (เช่นตอน dev) ต้องลบไฟล์
-`data/app.sqlite` เองก่อนรัน `npm start` ใหม่ — **ระวังการลบไฟล์นี้ใน production เพราะเป็นการลบข้อมูลจริง
-ถาวร**
+ไฟล์ `seed/*.csv` มาจากทะเบียนจริงที่แนบมากับ HANDOFF (230 สาขา, 207 ที่พัก, 114 พนักงาน) — `npm run
+seed` จะ import เฉพาะตอนตาราง `housing_planner.branches` ว่างเปล่าเท่านั้น ไม่ทับข้อมูลจริงที่มีอยู่แล้ว
+ถ้าต้องการล้างแล้วเริ่มใหม่ ต้องลบข้อมูลใน schema `housing_planner` เองผ่าน Supabase SQL Editor
+(**ห้ามรันคำสั่งลบกับ schema `public`** เพราะเป็นข้อมูลของระบบจองที่พักเดิม)
 
 ## ช่องว่างที่ยังไม่ปิด (สืบทอดจาก HANDOFF §10 + ที่เพิ่มระหว่างสร้างระบบจริง)
 
