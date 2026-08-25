@@ -1,0 +1,18 @@
+{
+  "name": "sma-housing-planner",
+  "version": "1.0.0",
+  "description": "เครื่องมือวางแผนที่พักภาคสนาม SMA (สำหรับ AREA) — คำนวณ/แดชบอร์ด ไม่มีขั้นจอง/อนุมัติในระบบ",
+  "private": true,
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed/run-seed.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "express": "^4.19.2"
+  }
+}

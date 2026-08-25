@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>เครื่องมือวางแผนที่พัก · AREA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@500;600;700&family=Prompt:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#FDF6E9; --surface:#FFFFFF; --ink:#201C1B; --ink-2:#5B5652; --ink-3:#9A948C; --line:#EFE6D3;
+  --coral:#F4543C; --coral-soft:#FFE4DE;
+  --teal:#0D9488; --teal-soft:#D9F5EF;
+  --mustard:#F5B700; --mustard-soft:#FFF3D2;
+  --cobalt:#2F4B9E; --cobalt-soft:#E4E9FC;
+  --violet:#7C3AED; --violet-soft:#EDE4FE;
+  --plum:#B8356F; --plum-soft:#FBE3ED;
+  --red:#DC2626; --red-soft:#FDE2E1;
+  --ink-panel:#1A1817;
+  --r:22px; --r-sm:12px; --r-pill:999px;
+  --disp:"Kodchasan","Prompt",system-ui,sans-serif;
+  --body:"Prompt","Noto Sans Thai",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+:focus-visible{outline:3px solid var(--cobalt);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+h1,h2,h3{font-family:var(--disp);margin:0}
+
+/* ---------- masthead (dark, สไตล์หน้า Contents ในภาพอ้างอิง) ---------- */
+.mast{background:var(--ink-panel);padding:22px 0 16px;border-bottom:4px solid var(--mustard)}
+.mast-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .emoji{font-size:34px;line-height:1}
+.brand h1{color:#fff;font-weight:700;font-size:22px;letter-spacing:.2px}
+.brand small{display:block;font-family:var(--mono);font-weight:400;font-size:11px;color:#B9B4AC;letter-spacing:.04em;margin-top:3px}
+.meta{font-family:var(--mono);font-size:11px;color:#B9B4AC;text-align:right}
+.meta b{color:#fff}
+.meta-row{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-top:2px}
+.refresh-btn{font-family:var(--mono);font-size:11px;color:#fff;background:var(--cobalt);border:none;border-radius:var(--r-pill);padding:5px 12px;cursor:pointer}
+.refresh-btn:hover{filter:brightness(1.1)}
+
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.tabbtn{font-family:var(--disp);font-size:13.5px;font-weight:600;border:none;border-radius:var(--r-pill);
+  padding:10px 18px;cursor:pointer;display:flex;align-items:center;gap:7px;color:var(--ink);background:#fff;
+  box-shadow:3px 3px 0 rgba(0,0,0,.55);transition:transform .12s}
+.tabbtn:hover{transform:translateY(-2px)}
+.tabbtn:active{transform:translate(2px,2px);box-shadow:none}
+.tabbtn.active{color:#fff;box-shadow:3px 3px 0 rgba(0,0,0,.55)}
+.tabbtn[data-color="cobalt"].active{background:var(--cobalt)}
+.tabbtn[data-color="teal"].active{background:var(--teal)}
+.tabbtn[data-color="coral"].active{background:var(--coral)}
+.tabbtn[data-color="mustard"].active{background:var(--mustard);color:var(--ink)}
+.tabbtn[data-color="violet"].active{background:var(--violet)}
+.tabbtn[data-color="plum"].active{background:var(--plum)}
+
+/* ---------- panels: หนึ่งสีต่อแท็บ เหมือนหน้าต่างๆในภาพอ้างอิง ---------- */
+.panel{display:none;padding:26px;margin:22px 0 44px;border-radius:var(--r);border:3px solid var(--ink)}
+.panel.active{display:block}
+.panel[data-tab="overview"]{background:var(--cobalt-soft)}
+.panel[data-tab="nearest"]{background:var(--teal-soft)}
+.panel[data-tab="cluster"]{background:var(--coral-soft)}
+.panel[data-tab="midpoint"]{background:var(--mustard-soft)}
+.panel[data-tab="empcoverage"]{background:var(--violet-soft)}
+.panel[data-tab="archive"]{background:var(--plum-soft)}
+.ptitle{font-size:20px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.pdesc{color:var(--ink-2);margin:0 0 18px;max-width:760px}
+
+/* ---------- generic surface card ---------- */
+.card{background:var(--surface);border:2.5px solid var(--ink);border-radius:var(--r-sm);padding:18px 20px;margin-bottom:16px}
+.card.pop{box-shadow:5px 5px 0 rgba(0,0,0,.5)}
+
+/* ---------- KPI badges ---------- */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--surface);border:2.5px solid var(--ink);border-radius:var(--r-sm);padding:14px 16px;display:flex;align-items:center;gap:12px}
+.kpi .badge{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex:none}
+.kpi .badge.cobalt{background:var(--cobalt-soft)} .kpi .badge.teal{background:var(--teal-soft)}
+.kpi .badge.red{background:var(--red-soft)} .kpi .badge.violet{background:var(--violet-soft)}
+.kpi .badge.plum{background:var(--plum-soft)}
+.kpi .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.kpi .val{font-family:var(--mono);font-size:20px;font-weight:600}
+.kpi .val.red{color:var(--red)}
+
+/* ---------- controls ---------- */
+label.field{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2);font-weight:600}
+select,input[type=number],input[type=text],input[type=date],textarea{
+  font-family:var(--body);font-size:14px;color:var(--ink);background:var(--surface);
+  border:2px solid var(--ink);border-radius:var(--r-sm);padding:9px 11px;min-height:42px}
+textarea{min-height:90px;font-family:var(--mono);font-size:12.5px}
+select:focus,input:focus,textarea:focus{border-color:var(--cobalt)}
+.controls{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-bottom:18px}
+.btn{font-family:var(--disp);font-weight:600;font-size:13.5px;border-radius:var(--r-pill);padding:10px 20px;
+  min-height:42px;cursor:pointer;border:2.5px solid var(--ink);background:#fff;color:var(--ink);
+  box-shadow:3px 3px 0 var(--ink);transition:transform .1s}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translate(3px,3px);box-shadow:none}
+.btn.primary{background:var(--ink);color:#fff}
+.btn.teal{background:var(--teal);color:#fff}
+.btn.coral{background:var(--coral);color:#fff}
+.btn.ghost{background:transparent;box-shadow:none}
+.btn.sm{padding:6px 14px;min-height:34px;font-size:12px;box-shadow:2px 2px 0 var(--ink)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.toggle-group{display:flex;border:2.5px solid var(--ink);border-radius:var(--r-pill);overflow:hidden}
+.toggle-group button{font-family:var(--mono);font-size:12px;padding:9px 14px;background:#fff;border:none;
+  border-right:2px solid var(--ink);cursor:pointer;color:var(--ink-2)}
+.toggle-group button:last-child{border-right:none}
+.toggle-group button.active{background:var(--violet);color:#fff;font-weight:600}
+.search-wrap{position:relative}
+.search-wrap input{padding-left:34px;min-width:230px}
+.search-wrap .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:15px}
+
+/* ---------- table ---------- */
+table.dtable{width:100%;border-collapse:collapse;background:var(--surface);border:2.5px solid var(--ink);border-radius:var(--r-sm);overflow:hidden}
+table.dtable thead th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-2);padding:11px 12px;border-bottom:2.5px solid var(--ink);background:#F4F1E8}
+table.dtable tbody td{padding:11px 12px;border-bottom:1.5px solid var(--line);vertical-align:top}
+table.dtable tbody tr:last-child td{border-bottom:none}
+table.dtable tbody tr.status-danger{background:var(--red-soft)}
+table.dtable tbody tr.status-warn{background:var(--mustard-soft)}
+table.dtable tbody tr:hover{filter:brightness(.97)}
+tr.detail-row td{background:#FBF9F2;padding:14px 16px}
+
+/* ---------- chips ---------- */
+.chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px}
+.chip.ok{background:var(--teal-soft);color:var(--teal)}
+.chip.warn{background:var(--mustard-soft);color:#8A6800}
+.chip.danger{background:var(--red-soft);color:var(--red)}
+.chip.tag{background:#EFEAE0;color:var(--ink-2)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0;font-size:12.5px;color:var(--ink-2)}
+.legend .dot{width:11px;height:11px;border-radius:50%;display:inline-block;margin-right:5px;border:1.5px solid var(--ink)}
+
+/* ---------- banners ---------- */
+.banner{border-radius:var(--r-sm);padding:13px 15px;font-size:13px;margin-bottom:16px;border:2.5px solid;display:flex;gap:10px;align-items:flex-start}
+.banner.danger{background:var(--red-soft);border-color:var(--red);color:#7A1E17}
+.banner.warn{background:var(--mustard-soft);border-color:var(--mustard);color:#6b4c14}
+
+/* ---------- map ---------- */
+.map-wrap{border:3px solid var(--ink);border-radius:var(--r-sm);overflow:hidden;margin-bottom:14px}
+#leaflet-map{height:420px;width:100%;background:#dfe7f5}
+
+/* ---------- import panel ---------- */
+.import-toggle{margin-bottom:16px}
+#import-panel{display:none;border:2.5px dashed var(--ink);background:#fff;border-radius:var(--r-sm);padding:18px 20px;margin-bottom:20px}
+#import-panel.open{display:block}
+#registry-panel{display:none;border:2.5px dashed var(--ink);background:#fff;border-radius:var(--r-sm);padding:18px 20px;margin-bottom:20px}
+#registry-panel.open{display:block}
+.registry-block{border-top:2px dashed var(--line);padding-top:16px;margin-top:16px}
+.registry-block:first-child{border-top:none;padding-top:0;margin-top:0}
+.registry-head{display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:15px}
+.reg-result{font-family:var(--mono);font-size:12px;color:var(--teal);margin-top:6px}
+input[type=file]{font-family:var(--body);font-size:12.5px;border:2px dashed var(--ink);border-radius:var(--r-sm);padding:10px;background:#FBF9F2;width:100%;max-width:420px}
+.import-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
+.divider{border-top:2px dashed var(--line);margin:18px 0}
+#imp-csv-result{font-family:var(--mono);font-size:12px;color:var(--teal);margin-top:8px}
+details.codebook summary{cursor:pointer;font-weight:600;color:var(--cobalt);margin-bottom:8px}
+.codebook-grid{max-height:160px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+
+/* ---------- misc ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0}
+.mini-stat{background:var(--surface);border:2px solid var(--ink);border-radius:var(--r-sm);padding:10px 12px}
+.mini-stat .lbl{font-family:var(--mono);font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.mini-stat .val{font-family:var(--mono);font-size:16px;font-weight:600}
+.rank{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;
+  background:var(--mustard);color:var(--ink);font-family:var(--mono);font-size:11px;font-weight:700;margin-right:8px;border:1.5px solid var(--ink)}
+.rank.n2,.rank.n3{background:#EFEAE0}
+.reco-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1.5px solid var(--line);flex-wrap:wrap;gap:6px}
+.reco-row:last-child{border-bottom:none}
+.savings{font-weight:700}
+.savings.pos{color:var(--teal)}
+.savings.neg{color:var(--red)}
+.jump{font-family:var(--disp);font-size:12.5px;font-weight:600;color:var(--cobalt);text-decoration:none;cursor:pointer;
+  background:var(--cobalt-soft);border:2px solid var(--cobalt);border-radius:var(--r-pill);padding:5px 12px;display:inline-block;margin-top:6px}
+.multi-card{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.loading-veil{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-size:16px;z-index:999}
+@media (max-width:640px){.grid2{grid-template-columns:1fr}.panel{padding:16px}.wrap{padding:0 12px}}
+</style>
+</head>
+<body>
+
+<div class="loading-veil" id="loading-veil">⏳ กำลังโหลดข้อมูล…</div>
+
+<div class="mast">
+  <div class="wrap">
+    <div class="mast-row">
+      <div class="brand">
+        <div class="emoji">🗂️</div>
+        <div>
+          <h1>เครื่องมือวางแผนที่พัก</h1>
+          <small>สำหรับ AREA · แดชบอร์ดคำนวณ ไม่มีขั้นจอง/อนุมัติในระบบ</small>
+        </div>
+      </div>
+      <div class="meta">
+        สาขา <span id="meta-branch-count">–</span> · ที่พัก <span id="meta-hotel-count">–</span> · พนักงาน <span id="meta-emp-count">–</span>
+        <div class="meta-row"><button class="refresh-btn" id="refresh-btn">🔄 รีเฟรชข้อมูลล่าสุด</button></div>
+      </div>
+    </div>
+    <div class="tabs" id="tabnav"></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section class="panel active" data-tab="overview">
+    <h2 class="ptitle">🗺️ ภาพรวม — แผนที่ &amp; ความครอบคลุมที่พัก</h2>
+    <p class="pdesc">ดูสาขาทั้งหมดบนแผนที่ สาขาไหนสีแดงคือไม่มีที่พักในระยะ 15 กม. ต้องรีบหาเพิ่ม กดที่แถวในตารางเพื่อดูรายชื่อที่พักใกล้สาขานั้น</p>
+
+    <div class="kpi-grid" id="overview-kpis"></div>
+
+    <div class="import-toggle">
+      <button class="btn primary" id="import-toggle-btn">📋 นำเข้า / เพิ่มแผนงาน</button>
+    </div>
+    <div id="import-panel">
+      <h3 style="font-size:15px;margin-bottom:6px">📤 อัพโหลดไฟล์แผนงาน (.xlsx / .csv)</h3>
+      <p class="pdesc" style="margin-bottom:8px">อัพโหลดไฟล์แผนงานจริง (เช่นไฟล์ที่มีคอลัมน์ รหัสสาขา / สาขา / จังหวัด / ประเภทงาน / วันที่เริ่มงาน / วันที่จบงาน / ทีมที่ไป / วันที่เข้างาน) ระบบจะอ่านและจับคู่รหัสสาขากับทะเบียนให้อัตโนมัติ</p>
+      <input type="file" id="imp-file" accept=".xlsx,.xls,.csv">
+      <div id="imp-file-result"></div>
+
+      <div class="divider"></div>
+      <h3 style="font-size:15px;margin-bottom:10px">➕ เพิ่มทีละรายการ</h3>
+      <div class="import-grid">
+        <label class="field">ทีม<input type="text" id="imp-team" placeholder="เช่น SMA6"></label>
+        <label class="field">สาขาที่ 1<select id="imp-branch"></select></label>
+        <label class="field">สาขาที่ 2 (ถ้ามี)<select id="imp-branch2"><option value="">— ไม่มี —</option></select></label>
+        <label class="field">ชาย<input type="number" id="imp-male" value="2" min="0"></label>
+        <label class="field">หญิง<input type="number" id="imp-female" value="1" min="0"></label>
+      </div>
+      <div class="import-grid">
+        <label class="field">วันทำงานเริ่ม<input type="date" id="imp-work-start"></label>
+        <label class="field">วันทำงานจบ<input type="date" id="imp-work-end"></label>
+        <label class="field">วันเข้าพักเริ่ม<input type="date" id="imp-stay-start"></label>
+        <label class="field">วันเข้าพักจบ<input type="date" id="imp-stay-end"></label>
+      </div>
+      <button class="btn teal sm" id="imp-add-btn">➕ เพิ่มแผนงาน</button>
+
+      <div class="divider"></div>
+      <h3 style="font-size:15px;margin-bottom:6px">📎 วางข้อมูลหลายแถวพร้อมกัน (CSV)</h3>
+      <p class="pdesc" style="margin-bottom:8px">รูปแบบ 1 แถวต่อ 1 บรรทัด: <span class="num">ทีม,รหัสสาขา,วันทำงานเริ่ม,วันทำงานจบ,วันเข้าพักเริ่ม,วันเข้าพักจบ,ชาย,หญิง</span></p>
+      <textarea id="imp-csv-text" placeholder="SMA6,CJX00097,2026-09-01,2026-09-03,2026-08-31,2026-09-03,2,2"></textarea>
+      <div style="margin-top:8px"><button class="btn coral sm" id="imp-csv-btn">📎 นำเข้า CSV</button></div>
+      <div id="imp-csv-result"></div>
+
+      <details class="codebook" style="margin-top:16px">
+        <summary>ดูรหัสสาขาทั้งหมด (<span id="codebook-count">–</span> แห่ง)</summary>
+        <div class="codebook-grid" id="codebook-list"></div>
+      </details>
+
+      <div class="divider"></div>
+      <h3 style="font-size:15px;margin-bottom:10px">📋 แผนงานในระบบตอนนี้</h3>
+      <div id="import-list"></div>
+    </div>
+
+    <div class="import-toggle">
+      <button class="btn primary" id="registry-toggle-btn">🗂️ ทะเบียนข้อมูลอ้างอิง (สาขา / ที่พัก / พนักงาน)</button>
+    </div>
+    <div id="registry-panel">
+      <p class="pdesc" style="margin-bottom:14px">อัพโหลดทะเบียนของจริงแทนข้อมูลปัจจุบัน — อัพโหลดใหม่จะแทนที่ชุดเดิมทั้งหมด (ไม่ใช่เพิ่มต่อท้าย) ใช้เมื่อได้ไฟล์ทะเบียนฉบับสมบูรณ์กว่าเดิมมา</p>
+
+      <div class="registry-block">
+        <div class="registry-head"><b>📍 สาขา</b><span class="chip tag" id="reg-branch-count">–</span></div>
+        <p class="pdesc" style="margin:4px 0 8px">คอลัมน์ที่ต้องมี: รหัสสาขา (หรือ &ldquo;CJX Store Code&rdquo;ถ้ามีทั้งสองคอลัมน์จะใช้อันนี้ก่อน), ชื่อสาขา, อำเภอ, จังหวัด, ละติจูด, ลองจิจูด</p>
+        <input type="file" id="reg-branch-file" accept=".xlsx,.xls,.csv">
+        <div id="reg-branch-result" class="reg-result"></div>
+        <div class="import-grid" style="margin-top:10px">
+          <label class="field">รหัสสาขา<input type="text" id="rb-code"></label>
+          <label class="field">ชื่อสาขา<input type="text" id="rb-name"></label>
+          <label class="field">อำเภอ<input type="text" id="rb-district"></label>
+          <label class="field">จังหวัด<input type="text" id="rb-province"></label>
+          <label class="field">ละติจูด<input type="number" step="0.000001" id="rb-lat"></label>
+          <label class="field">ลองจิจูด<input type="number" step="0.000001" id="rb-lng"></label>
+        </div>
+        <button class="btn teal sm" id="rb-add-btn" style="margin-top:8px">➕ เพิ่มสาขา</button>
+      </div>
+
+      <div class="registry-block">
+        <div class="registry-head"><b>🏨 ที่พัก</b><span class="chip tag" id="reg-hotel-count">–</span></div>
+        <p class="pdesc" style="margin:4px 0 8px">คอลัมน์ที่ต้องมี: ชื่อที่พัก, ราคา, อำเภอ, จังหวัด, ละติจูด, ลองจิจูด</p>
+        <input type="file" id="reg-hotel-file" accept=".xlsx,.xls,.csv">
+        <div id="reg-hotel-result" class="reg-result"></div>
+        <div class="import-grid" style="margin-top:10px">
+          <label class="field">ชื่อที่พัก<input type="text" id="rh-name"></label>
+          <label class="field">ราคา/คืน<input type="number" id="rh-price"></label>
+          <label class="field">อำเภอ<input type="text" id="rh-district"></label>
+          <label class="field">จังหวัด<input type="text" id="rh-province"></label>
+          <label class="field">ละติจูด<input type="number" step="0.000001" id="rh-lat"></label>
+          <label class="field">ลองจิจูด<input type="number" step="0.000001" id="rh-lng"></label>
+        </div>
+        <button class="btn teal sm" id="rh-add-btn" style="margin-top:8px">➕ เพิ่มที่พัก</button>
+      </div>
+
+      <div class="registry-block">
+        <div class="registry-head"><b>👤 พนักงาน</b><span class="chip tag" id="reg-emp-count">–</span></div>
+        <p class="pdesc" style="margin:4px 0 8px">คอลัมน์ที่รองรับ: ชื่อพนักงาน, ตำแหน่ง/ทีม, พิกัด (รูปแบบ &ldquo;ละติจูด, ลองจิจูด&rdquo; ในเซลล์เดียวก็ได้), เพศ, ชื่อเล่น, Areaดูแล, เบอร์โทร — มีแค่ชื่อพนักงานก็อัพโหลดได้ ถ้าไม่มีพิกัดจะข้ามการเช็ค &ldquo;บ้านใกล้สาขา&rdquo; ให้คนนั้นเฉยๆ</p>
+        <input type="file" id="reg-emp-file" accept=".xlsx,.xls,.csv">
+        <div id="reg-emp-result" class="reg-result"></div>
+        <div class="import-grid" style="margin-top:10px">
+          <label class="field">ชื่อ<input type="text" id="re-name"></label>
+          <label class="field">ทีม<input type="text" id="re-team"></label>
+          <label class="field">ละติจูดบ้าน (ถ้ามี)<input type="number" step="0.000001" id="re-lat"></label>
+          <label class="field">ลองจิจูดบ้าน (ถ้ามี)<input type="number" step="0.000001" id="re-lng"></label>
+        </div>
+        <button class="btn teal sm" id="re-add-btn" style="margin-top:8px">➕ เพิ่มพนักงาน</button>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:var(--red)"></span>ไม่มีที่พักในระยะ — ต้องรีบหาเพิ่ม</span>
+      <span><span class="dot" style="background:var(--mustard)"></span>มีน้อย (1-2 แห่ง) — ควรหาสำรอง</span>
+      <span><span class="dot" style="background:var(--teal)"></span>เพียงพอ</span>
+      <span><span class="dot" style="background:var(--cobalt);opacity:.6"></span>ที่พักในทะเบียน</span>
+    </div>
+    <div class="map-wrap"><div id="leaflet-map"></div></div>
+
+    <div id="multi-branch-jobs"></div>
+
+    <div class="controls">
+      <label class="field search-wrap">ค้นหาสาขา
+        <span class="ic">🔍</span>
+        <input type="text" id="overview-search" placeholder="ชื่อสาขา / อำเภอ / จังหวัด">
+      </label>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px;min-height:42px">
+        <input type="checkbox" id="scope-toggle" checked style="min-height:auto;width:18px">
+        แสดงเฉพาะสาขาที่มีแผนงาน (ไม่รวมงานที่จบแล้ว)
+      </label>
+    </div>
+    <div id="overview-table"></div>
+  </section>
+
+  <section class="panel" data-tab="nearest">
+    <h2 class="ptitle">🏨 ที่พักแนะนำตามสาขา</h2>
+    <p class="pdesc">ดูที่พักใกล้สุดของทุกสาขาตามแผนงานพร้อมกัน หรือเลือกดูทีละสาขาก็ได้</p>
+    <div class="controls">
+      <div class="toggle-group" id="nearest-mode-group">
+        <button data-val="all" class="active">ทุกสาขาตามแผนงาน</button>
+        <button data-val="one">เลือกสาขาเอง</button>
+      </div>
+      <label class="field" id="nearest-branch-wrap" style="display:none">สาขา<select id="nearest-branch"></select></label>
+    </div>
+    <div id="nearest-body"></div>
+  </section>
+
+  <section class="panel" data-tab="cluster">
+    <h2 class="ptitle">🤝 รวมที่พักได้ (สาขาใกล้กัน คนละทีม)</h2>
+    <p class="pdesc">สแกนแผนงานทั้งระบบข้ามทีมเอง หาคู่สาขาที่ทั้งจัดงานวันเดียวกันและห่างกันไม่เกินเกณฑ์ แล้วเสนอที่พักร่วม พร้อมประมาณการว่าจองแยกกับจองรวมต่างกันเท่าไหร่</p>
+    <div class="controls">
+      <label class="field">เกณฑ์ &ldquo;ใกล้กันพอจะรวม&rdquo;
+        <select id="cluster-threshold">
+          <option value="20">≤20 กม.</option>
+          <option value="30" selected>≤30 กม. (ค่ามาตรฐาน)</option>
+          <option value="40">≤40 กม.</option>
+        </select>
+      </label>
+    </div>
+    <div id="cluster-body"></div>
+  </section>
+
+  <section class="panel" data-tab="midpoint">
+    <h2 class="ptitle">🚗 จุดกลาง 2 สาขา (1 ทีม ดูแล 2 งานพร้อมกัน)</h2>
+    <p class="pdesc">เลือกสาขาสองแห่งที่ทีมเดียวต้องรับผิดชอบพร้อมกัน ระบบหาที่พักที่ทำให้รอบส่งพนักงานสั้นที่สุด (คะแนน = ระยะขับพัก→สาขา1 + ระยะขับพัก→สาขา2)</p>
+    <div class="controls">
+      <label class="field">สาขาที่ 1<select id="mid-branch-a"></select></label>
+      <label class="field">สาขาที่ 2<select id="mid-branch-b"></select></label>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px;min-height:42px">
+        <input type="checkbox" id="mid-weight-toggle" style="min-height:auto;width:18px">
+        ถ่วงน้ำหนักตามจำนวนคน
+      </label>
+      <label class="field" style="max-width:90px">คนที่สาขา 1<input type="number" id="mid-people-a" value="4" min="1"></label>
+      <label class="field" style="max-width:90px">คนที่สาขา 2<input type="number" id="mid-people-b" value="3" min="1"></label>
+    </div>
+    <div id="midpoint-body"></div>
+  </section>
+
+  <section class="panel" data-tab="empcoverage">
+    <h2 class="ptitle">🏠 พนักงานบ้านใกล้สาขา — ไม่ต้องจองที่พัก</h2>
+    <p class="pdesc">เทียบพิกัดบ้านพนักงานกับสาขาที่ต้องไปทำงาน คนที่บ้านใกล้พอ ระบบหักออกจากจำนวนคนที่ต้องคิดห้องให้อัตโนมัติ</p>
+    <div class="controls">
+      <div class="toggle-group" id="emp-mode-group">
+        <button data-val="all" class="active">ทุกงานตามแผนงาน (แยกตามทีม)</button>
+        <button data-val="one">เลือกสาขาเอง (เทียบทุกคน)</button>
+      </div>
+      <label class="field" id="emp-branch-wrap" style="display:none">สาขา<select id="emp-branch"></select></label>
+      <label class="field">เกณฑ์ระยะ
+        <div class="toggle-group" id="emp-threshold-group">
+          <button data-val="10" class="active">≤10 กม. (เข้มงวด)</button>
+          <button data-val="30">≤30 กม. (หลวม)</button>
+        </div>
+      </label>
+    </div>
+    <div id="emp-body"></div>
+  </section>
+
+  <section class="panel" data-tab="archive">
+    <h2 class="ptitle">🗄️ จัดเก็บ — งานที่จบไปแล้ว</h2>
+    <p class="pdesc">งานที่วันจบงานผ่านไปแล้ว (เทียบกับวันนี้) จะถูกย้ายมาไว้ที่นี่อัตโนมัติ และไม่รวมอยู่ในการคำนวณของหน้าอื่นทั้งหมด</p>
+    <div id="archive-body"></div>
+  </section>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
