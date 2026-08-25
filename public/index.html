@@ -115,6 +115,17 @@ select:focus,input:focus,textarea:focus{border-color:var(--cobalt)}
 .search-wrap input{padding-left:34px;min-width:230px}
 .search-wrap .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:15px}
 
+/* ---------- searchable branch picker (replaces plain <select> everywhere) ---------- */
+.branchpick{position:relative}
+.branchpick input{width:100%;min-width:230px}
+.bp-list{position:absolute;top:100%;left:0;right:0;z-index:40;background:var(--surface);
+  border:2.5px solid var(--ink);border-radius:var(--r-sm);margin-top:4px;max-height:260px;overflow:auto;
+  box-shadow:3px 3px 0 rgba(0,0,0,.35);display:none}
+.bp-opt{padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1.5px solid var(--line)}
+.bp-opt:last-child{border-bottom:none}
+.bp-opt:hover,.bp-opt.hi{background:var(--cobalt-soft)}
+.bp-empty{padding:9px 12px;color:var(--ink-3);font-size:12.5px}
+
 /* ---------- table ---------- */
 table.dtable{width:100%;border-collapse:collapse;background:var(--surface);border:2.5px solid var(--ink);border-radius:var(--r-sm);overflow:hidden}
 table.dtable thead th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
@@ -225,8 +236,12 @@ details.codebook summary{cursor:pointer;font-weight:600;color:var(--cobalt);marg
       <h3 style="font-size:15px;margin-bottom:10px">➕ เพิ่มทีละรายการ</h3>
       <div class="import-grid">
         <label class="field">ทีม<input type="text" id="imp-team" placeholder="เช่น SMA6"></label>
-        <label class="field">สาขาที่ 1<select id="imp-branch"></select></label>
-        <label class="field">สาขาที่ 2 (ถ้ามี)<select id="imp-branch2"><option value="">— ไม่มี —</option></select></label>
+        <label class="field">สาขาที่ 1
+          <div class="branchpick"><input type="text" id="imp-branch" autocomplete="off" placeholder="พิมพ์ค้นหาสาขา..."><div class="bp-list" id="imp-branch-list"></div></div>
+        </label>
+        <label class="field">สาขาที่ 2 (ถ้ามี)
+          <div class="branchpick"><input type="text" id="imp-branch2" autocomplete="off" placeholder="— ไม่มี —"><div class="bp-list" id="imp-branch2-list"></div></div>
+        </label>
         <label class="field">ชาย<input type="number" id="imp-male" value="2" min="0"></label>
         <label class="field">หญิง<input type="number" id="imp-female" value="1" min="0"></label>
       </div>
@@ -333,13 +348,16 @@ details.codebook summary{cursor:pointer;font-weight:600;color:var(--cobalt);marg
 
   <section class="panel" data-tab="nearest">
     <h2 class="ptitle">🏨 ที่พักแนะนำตามสาขา</h2>
-    <p class="pdesc">ดูที่พักใกล้สุดของทุกสาขาตามแผนงานพร้อมกัน หรือเลือกดูทีละสาขาก็ได้</p>
+    <p class="pdesc">เลือกสาขาจากดรอปดาว (พิมพ์ค้นหาได้) เพื่อดูที่พักใกล้สุด — โหมด &ldquo;ทุกสาขาตามแผนงาน&rdquo; จะกรองตัวเลือกให้เหลือแค่สาขาที่มีแผนงานอยู่ หรือสลับเป็น &ldquo;เลือกสาขาเอง&rdquo; เพื่อดูสาขาไหนก็ได้ในทะเบียนทั้งหมด</p>
     <div class="controls">
       <div class="toggle-group" id="nearest-mode-group">
         <button data-val="all" class="active">ทุกสาขาตามแผนงาน</button>
         <button data-val="one">เลือกสาขาเอง</button>
       </div>
-      <label class="field" id="nearest-branch-wrap" style="display:none">สาขา<select id="nearest-branch"></select></label>
+      <label class="field" id="nearest-branch-wrap">
+        <span id="nearest-branch-label">เลือกสาขา</span>
+        <div class="branchpick"><input type="text" id="nearest-branch" autocomplete="off" placeholder="พิมพ์ค้นหาสาขา..."><div class="bp-list" id="nearest-branch-list"></div></div>
+      </label>
     </div>
     <div id="nearest-body"></div>
   </section>
@@ -363,8 +381,12 @@ details.codebook summary{cursor:pointer;font-weight:600;color:var(--cobalt);marg
     <h2 class="ptitle">🚗 จุดกลาง 2 สาขา (1 ทีม ดูแล 2 งานพร้อมกัน)</h2>
     <p class="pdesc">เลือกสาขาสองแห่งที่ทีมเดียวต้องรับผิดชอบพร้อมกัน ระบบหาที่พักที่ทำให้รอบส่งพนักงานสั้นที่สุด (คะแนน = ระยะขับพัก→สาขา1 + ระยะขับพัก→สาขา2)</p>
     <div class="controls">
-      <label class="field">สาขาที่ 1<select id="mid-branch-a"></select></label>
-      <label class="field">สาขาที่ 2<select id="mid-branch-b"></select></label>
+      <label class="field">สาขาที่ 1
+        <div class="branchpick"><input type="text" id="mid-branch-a" autocomplete="off" placeholder="พิมพ์ค้นหาสาขา..."><div class="bp-list" id="mid-branch-a-list"></div></div>
+      </label>
+      <label class="field">สาขาที่ 2
+        <div class="branchpick"><input type="text" id="mid-branch-b" autocomplete="off" placeholder="พิมพ์ค้นหาสาขา..."><div class="bp-list" id="mid-branch-b-list"></div></div>
+      </label>
       <label class="field" style="flex-direction:row;align-items:center;gap:8px;min-height:42px">
         <input type="checkbox" id="mid-weight-toggle" style="min-height:auto;width:18px">
         ถ่วงน้ำหนักตามจำนวนคน
@@ -383,7 +405,9 @@ details.codebook summary{cursor:pointer;font-weight:600;color:var(--cobalt);marg
         <button data-val="all" class="active">ทุกงานตามแผนงาน (แยกตามทีม)</button>
         <button data-val="one">เลือกสาขาเอง (เทียบทุกคน)</button>
       </div>
-      <label class="field" id="emp-branch-wrap" style="display:none">สาขา<select id="emp-branch"></select></label>
+      <label class="field" id="emp-branch-wrap" style="display:none">สาขา
+        <div class="branchpick"><input type="text" id="emp-branch" autocomplete="off" placeholder="พิมพ์ค้นหาสาขา..."><div class="bp-list" id="emp-branch-list"></div></div>
+      </label>
       <label class="field">เกณฑ์ระยะ
         <div class="toggle-group" id="emp-threshold-group">
           <button data-val="10" class="active">≤10 กม. (เข้มงวด)</button>

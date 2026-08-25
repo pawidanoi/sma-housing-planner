@@ -70,25 +70,100 @@ function showTab(id){
   if(id==='overview' && mapObj){ setTimeout(()=>mapObj.invalidateSize(),80); }
 }
 
-/* ---------- populate selects ---------- */
-function fillBranchSelect(sel, defaultCode, placeholder, branchListOverride){
-  sel.innerHTML = '';
-  if(placeholder){
-    const po=document.createElement('option'); po.value=''; po.textContent=placeholder;
-    sel.appendChild(po);
+/* ---------- searchable branch picker (type-to-filter, replaces plain <select>) ---------- */
+const BRANCH_PICKERS = {};
+function normSearch(s){ return String(s||'').toLowerCase(); }
+function createBranchPicker(id, initialList, opts){
+  opts = opts || {};
+  const input = document.getElementById(id);
+  const listEl = document.getElementById(id+'-list');
+  let items = (initialList||[]).slice().sort((a,b)=>a.pv.localeCompare(b.pv,'th'));
+  let filtered = [];
+  let hiIndex = -1;
+
+  function labelFor(code){
+    if(code==='' && opts.emptyLabel) return opts.emptyLabel;
+    const b = items.find(x=>x.c===code);
+    return b ? branchLabel(b) : '';
   }
-  (branchListOverride || APPDATA.branches).slice().sort((a,b)=>a.pv.localeCompare(b.pv,'th')).forEach(b=>{
-    const o=document.createElement('option'); o.value=b.c; o.textContent=branchLabel(b);
-    if(b.c===defaultCode) o.selected=true;
-    sel.appendChild(o);
+  function renderOptions(){
+    listEl.innerHTML = filtered.length
+      ? filtered.map((b,i)=>'<div class="bp-opt'+(i===hiIndex?' hi':'')+'" data-code="'+esc(b.c)+'">'+(b.__empty?esc(b.n):esc(branchLabel(b)))+'</div>').join('')
+      : '<div class="bp-empty">ไม่พบสาขาที่ตรงกับคำค้นหา</div>';
+  }
+  function openWith(filterText){
+    const q = normSearch(filterText);
+    let base = items;
+    filtered = !q ? base.slice(0,80) : base.filter(b=>normSearch(branchLabel(b)).includes(q)).slice(0,80);
+    if(opts.emptyLabel && (!q || normSearch(opts.emptyLabel).includes(q))){
+      filtered = [{c:'', n:opts.emptyLabel, d:'', pv:'', lo:0, la:0, __empty:true}, ...filtered];
+    }
+    hiIndex = -1;
+    renderOptions();
+    listEl.style.display = 'block';
+  }
+  function close(){ listEl.style.display = 'none'; hiIndex = -1; }
+  function commit(code, silent){
+    input.dataset.code = code || '';
+    input.value = labelFor(code);
+    close();
+    if(!silent) input.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  input.addEventListener('focus', ()=>{ input.select(); openWith(''); });
+  input.addEventListener('input', ()=>{ openWith(input.value); });
+  input.addEventListener('keydown', e=>{
+    if(listEl.style.display!=='block') return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); hiIndex = Math.min(hiIndex+1, filtered.length-1); renderOptions(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); hiIndex = Math.max(hiIndex-1, 0); renderOptions(); }
+    else if(e.key==='Enter'){ e.preventDefault(); const pick = filtered[hiIndex>=0?hiIndex:0]; if(pick) commit(pick.c); }
+    else if(e.key==='Escape'){ close(); input.value = labelFor(input.dataset.code||''); }
   });
+  input.addEventListener('blur', ()=>{
+    setTimeout(()=>{ close(); input.value = labelFor(input.dataset.code||''); }, 120);
+  });
+  listEl.addEventListener('mousedown', e=>{
+    const opt = e.target.closest('.bp-opt');
+    if(!opt) return;
+    e.preventDefault();
+    commit(opt.dataset.code);
+  });
+
+  function defaultCode(){
+    if(opts.emptyLabel) return '';
+    const i = opts.defaultIndex || 0;
+    return items[i] ? items[i].c : (items[0] ? items[0].c : '');
+  }
+  const picker = {
+    setList(newList, keepIfValid){
+      items = (newList||[]).slice().sort((a,b)=>a.pv.localeCompare(b.pv,'th'));
+      const cur = input.dataset.code || '';
+      const stillValid = keepIfValid!==false && (cur==='' ? !!opts.emptyLabel : items.some(x=>x.c===cur));
+      if(stillValid){ input.value = labelFor(cur); }
+      else { commit(defaultCode(), true); }
+    },
+    getValue(){ return input.dataset.code || ''; },
+    setValue(code, silent){ commit(code||'', !!silent); },
+  };
+  commit(defaultCode(), true);
+  BRANCH_PICKERS[id] = picker;
+  return picker;
 }
+function setBranchPickerList(id, list, keepIfValid){ BRANCH_PICKERS[id] && BRANCH_PICKERS[id].setList(list, keepIfValid); }
+function getBranchPickerValue(id){ return BRANCH_PICKERS[id] ? BRANCH_PICKERS[id].getValue() : ''; }
+function setBranchPickerValue(id, code, silent){ BRANCH_PICKERS[id] && BRANCH_PICKERS[id].setValue(code, silent); }
+
 const nearestSel = document.getElementById('nearest-branch');
 const midA = document.getElementById('mid-branch-a');
 const midB = document.getElementById('mid-branch-b');
 const empSel = document.getElementById('emp-branch');
 const impBranchSel = document.getElementById('imp-branch');
 const impBranch2Sel = document.getElementById('imp-branch2');
+createBranchPicker('nearest-branch', []);
+createBranchPicker('mid-branch-a', []);
+createBranchPicker('mid-branch-b', [], {defaultIndex:1});
+createBranchPicker('emp-branch', []);
+createBranchPicker('imp-branch', []);
+createBranchPicker('imp-branch2', [], {emptyLabel:'— ไม่มี —'});
 
 function refreshMetaCounts(){
   document.getElementById('meta-branch-count').textContent = APPDATA.branches.length;
@@ -229,7 +304,8 @@ document.getElementById('multi-branch-jobs').addEventListener('click', e=>{
   const btn = e.target.closest('[data-jump-a]');
   if(!btn) return;
   showTab('midpoint');
-  midA.value = btn.dataset.jumpA; midB.value = btn.dataset.jumpB;
+  setBranchPickerValue('mid-branch-a', btn.dataset.jumpA, true);
+  setBranchPickerValue('mid-branch-b', btn.dataset.jumpB, true);
   renderMidpoint();
 });
 
@@ -270,17 +346,21 @@ document.getElementById('import-toggle-btn').addEventListener('click', ()=>{
   document.getElementById('import-panel').classList.toggle('open');
 });
 function refreshBranchSelects(){
-  // เลือกสาขาด้วยตัวเอง (nearest/midpoint/emp) ใช้ทะเบียนเต็มเสมอ ไม่ผูกกับ scope-toggle —
-  // scope มีผลแค่กับมุมมอง "ทุกสาขาตามแผนงาน" เท่านั้น ไม่ควรทำให้เลือกสาขาเองไม่ได้
+  // เลือกสาขาด้วยตัวเอง (midpoint/emp/import) ใช้ทะเบียนเต็มเสมอ ไม่ผูกกับ scope-toggle —
+  // scope มีผลแค่กับมุมมอง "ทุกสาขาตามแผนงาน" ของแท็บ "ที่พักแนะนำตามสาขา" เท่านั้น
   const list = APPDATA.branches;
-  const codes = new Set(list.map(b=>b.c));
-  const keepOrFirst = sel => codes.has(sel.value) ? sel.value : (list[0] ? list[0].c : null);
-  fillBranchSelect(nearestSel, keepOrFirst(nearestSel), null, list);
-  fillBranchSelect(midA, keepOrFirst(midA), null, list);
-  fillBranchSelect(midB, keepOrFirst(midB), null, list);
-  fillBranchSelect(empSel, keepOrFirst(empSel), null, list);
-  fillBranchSelect(impBranchSel, keepOrFirst(impBranchSel), null, list);
-  fillBranchSelect(impBranch2Sel, impBranch2Sel.value, '— ไม่มี —', list);
+  setBranchPickerList('mid-branch-a', list);
+  setBranchPickerList('mid-branch-b', list);
+  setBranchPickerList('emp-branch', list);
+  setBranchPickerList('imp-branch', list);
+  setBranchPickerList('imp-branch2', list);
+  updateNearestBranchPickerList();
+}
+function updateNearestBranchPickerList(){
+  const list = nearestMode==='all' ? scopedBranchList() : APPDATA.branches;
+  const labelEl = document.getElementById('nearest-branch-label');
+  if(labelEl) labelEl.textContent = nearestMode==='all' ? 'เลือกสาขา (จากแผนงานที่ใช้งานอยู่)' : 'เลือกสาขา (ทั้งทะเบียน)';
+  setBranchPickerList('nearest-branch', list);
 }
 function refreshScheduleViews(){
   renderOverviewKPIs(); renderOverviewTable(); renderMultiBranchJobs(); renderCluster(); renderImportList(); renderArchive();
@@ -406,7 +486,7 @@ document.getElementById('imp-file').addEventListener('change', function(e){
 });
 document.getElementById('imp-add-btn').addEventListener('click', async ()=>{
   const team = document.getElementById('imp-team').value.trim();
-  const b1 = impBranchSel.value, b2 = impBranch2Sel.value;
+  const b1 = getBranchPickerValue('imp-branch'), b2 = getBranchPickerValue('imp-branch2');
   const ws = document.getElementById('imp-work-start').value, we = document.getElementById('imp-work-end').value;
   let ss = document.getElementById('imp-stay-start').value || ws;
   let se = document.getElementById('imp-stay-end').value || we;
@@ -626,7 +706,7 @@ document.querySelectorAll('#nearest-mode-group button').forEach(btn=>{
     document.querySelectorAll('#nearest-mode-group button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     nearestMode = btn.dataset.val;
-    document.getElementById('nearest-branch-wrap').style.display = nearestMode==='one' ? '' : 'none';
+    updateNearestBranchPickerList();
     renderNearest();
   });
 });
@@ -648,14 +728,12 @@ function nearestBranchBlock(b, limit){
 }
 function renderNearest(){
   const box = document.getElementById('nearest-body');
-  if(nearestMode==='all'){
-    const list = scopedBranchList();
-    box.innerHTML = list.map(b=>nearestBranchBlock(b,5)).join('');
-  } else {
-    const b = branchByCode[nearestSel.value];
-    if(!b){ box.innerHTML=''; return; }
-    box.innerHTML = nearestBranchBlock(b,10);
+  const b = branchByCode[getBranchPickerValue('nearest-branch')];
+  if(!b){
+    box.innerHTML = '<div class="banner warn">🟡 '+(nearestMode==='all' ? 'ยังไม่มีสาขาที่มีแผนงานอยู่ — เพิ่ม/อัพโหลดแผนงานก่อน หรือสลับเป็น &ldquo;เลือกสาขาเอง&rdquo;' : 'เลือกสาขาก่อน')+'</div>';
+    return;
   }
+  box.innerHTML = nearestBranchBlock(b, 10);
 }
 nearestSel.addEventListener('change', renderNearest);
 
@@ -727,7 +805,7 @@ document.getElementById('cluster-threshold').addEventListener('change', renderCl
 
 /* ================= TAB: midpoint ================= */
 function renderMidpoint(){
-  const codeA = midA.value, codeB = midB.value;
+  const codeA = getBranchPickerValue('mid-branch-a'), codeB = getBranchPickerValue('mid-branch-b');
   const bA = branchByCode[codeA], bB = branchByCode[codeB];
   const box = document.getElementById('midpoint-body');
   if(!bA || !bB || bA.c===bB.c){
@@ -766,7 +844,6 @@ function renderMidpoint(){
 }
 [midA,midB,document.getElementById('mid-weight-toggle'),document.getElementById('mid-people-a'),document.getElementById('mid-people-b')]
   .forEach(el=>el.addEventListener('change',renderMidpoint));
-[midA,midB].forEach(el=>el.addEventListener('input',renderMidpoint));
 
 /* ================= TAB: employee home coverage ================= */
 let empThreshold = 10;
@@ -823,7 +900,7 @@ function empRowsTable(rows){
 function renderEmpCoverage(){
   const box = document.getElementById('emp-body');
   if(empMode==='one'){
-    const b = branchByCode[empSel.value];
+    const b = branchByCode[getBranchPickerValue('emp-branch')];
     if(!b){ box.innerHTML=''; return; }
     const rows = empSortRows(APPDATA.employees.map(e=>empRowFor(e,[b])));
     box.innerHTML = empSummaryKPI(rows) + empRowsTable(rows);
